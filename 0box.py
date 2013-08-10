@@ -1,0 +1,128 @@
+# encoding: utf-8
+# 0box (nullbox)
+import wx
+import subprocess, os.path
+import sys
+import re
+
+app = wx.App()
+
+def evaluate(s):
+    try:
+        return "= " + repr(eval(s))
+    except Exception as e:
+        return str(e)
+
+commands = {
+    "exit": sys.exit,
+    "google": "http://www.google.com/search?q=",
+    "lucky": "http://www.google.com/search?btnI=&q=",
+    "g": "google",
+    "gl": "lucky",
+    "=": evaluate,
+    "help": "?",
+    "?": lambda x=None: ("no help for %s" % x if not x in commands else str(commands[x])) if x else "Available commands: " + ", ".join(commands),
+    "size": lambda w=250,h=24: nullbox.SetInitialSize((int(w), int(h))) or True and "",
+    "pos":  lambda x=10000,y=10000: nullbox.SetPosition((int(x), int(y))) or "",
+    "hello": lambda: "Hello World!",
+}
+
+
+class Nullbox(wx.Frame):
+    def __init__(self):
+        super(Nullbox, self).__init__(
+            parent = None,
+            title = "0box",
+            style = 0,
+            size = (50,24),
+        )
+
+        self.text = wx.TextCtrl(self)
+        self.text.Bind(wx.EVT_CHAR, self.OnChange)
+
+        #self.panel = wx.Panel(self, size=(3,24))
+
+        self.Centre()
+        self.Show()
+
+        self.text.SetFocus()
+
+        self.history = []
+
+    def OnChange(self, e):
+        key = e.GetKeyCode()
+        if key == 13: #enter
+            s = self.text.GetValue()
+            self.history.append(s)
+            self.history_index = len(self.history)
+            result = self.Execute(s)
+            self.text.SetValue(result)
+            self.text.SelectAll()
+
+        elif key==315: # up
+            if self.history_index == len(self.history):
+                self.current_line = self.text.GetValue()
+            if self.history_index > 0:
+                self.history_index -= 1
+                self.text.SetValue(self.history[self.history_index])
+                self.text.SetSelection(len(self.text.GetValue()),len(self.text.GetValue()))
+
+        elif key == 317: # down
+            if self.history_index < len(self.history):
+                self.history_index += 1
+                if self.history_index < len(self.history):
+                    self.text.SetValue(self.history[self.history_index])
+                else:
+                    self.text.SetValue(self.current_line)
+                self.text.SetSelection(len(self.text.GetValue()),len(self.text.GetValue()))
+
+        else:
+            e.Skip()
+
+    def Execute(self, s):
+        args = re.split("\\s*", s)
+        cmd = args[0]
+        args = args[1:]
+        if -1 in args and not args[-1]:
+            del args[-1]
+
+        if cmd in commands:
+            command_object = commands[cmd]
+            if type(command_object) == str:
+                s = command_object + " " + " ".join(args)
+                return self.Execute(s)
+            else:
+                return command_object(*args)
+
+
+        which = subprocess.Popen(["which", cmd], stdout=subprocess.PIPE)
+        stdout, stderr = which.communicate()
+        path = stdout.strip()
+        if path:
+            subprocess.Popen([path]+args)
+            return ""
+        else:
+            xdg = subprocess.Popen(["xdg-open", s], stderr=subprocess.PIPE)
+            (_, output) = xdg.communicate()
+            if xdg.returncode:
+                return output.strip() or "???"
+                
+nullbox = Nullbox()
+
+def main():
+
+    try:
+        with open(os.path.join(os.environ["HOME"], ".0box")) as f:
+            for line in f:
+                nullbox.Execute(line.strip())
+    except IOError:
+        pass
+
+
+    app.MainLoop()
+
+
+if __name__ == "__main__":
+    main()
+
+
