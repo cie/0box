@@ -80,6 +80,9 @@ class Nullbox(wx.Frame):
             e.Skip()
 
     def Execute(self, s):
+        s = s.strip()
+        if not s:
+            return ""
         args = re.split("\\s*", s)
         cmd = args[0]
         args = args[1:]
